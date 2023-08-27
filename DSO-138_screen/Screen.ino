@@ -2,9 +2,16 @@
 
 #include "Screen.hpp"
 #include "Font.hpp"
+#include "Commands.hpp"
 
 namespace TFT
 {
+    #define TFT_nRESET_Bit      11    // Port GPIOB
+    #define TFT_RS_Bit          14    // Port GPIOC
+    #define TFT_nCS_Bit         13    // Port GPIOC
+    #define TFT_nWR_Bit         15    // Port GPIOC
+    #define TFT_nRD_Bit         10    // Port GPIOB
+
     // Constructor.
     //
     Screen::Screen() :
@@ -34,6 +41,7 @@ namespace TFT
         init_screen();
     }
 
+
     // Set the foreground color
     //
     void Screen::SetForeground(uint16_t color)
@@ -41,12 +49,14 @@ namespace TFT
         foreground_ = color;  
     }
 
+
     // Set the background color
     //
     void Screen::SetBackground(uint16_t color)
     {
         background_ = color;
     }
+
     
     // Clear the screen
     ///
@@ -69,86 +79,32 @@ namespace TFT
     //
     void Screen::DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
     {
-        uint16_t dx = 0;
-        uint16_t dy = 0;
-        int16_t sx = 0;
-        int16_t sy = 0;
-        int16_t e  = 0;
-        
-        if (x1 > x0)
-        {
-            dx = x1 - x0;
-            sx = 1;
-        }
-        else
-        {
-            dx = x0 - x1;
-            sx = -1;
-        }
+        uint16_t dx = (x1 > x0) ? x1 - x0 : x0 - x1;
+        uint16_t dy = (y1 > y0) ? y1 - y0 : y0 - y1;
+        int16_t  sx = (x1 > x0) ? 1 : -1;
+        int16_t  sy = (y1 > y0) ? 1 : -1;
+        int16_t  e = dx + dy;
 
-        if (y1 > y0)
-        {
-            dy = y1 - y0;
-            sy = 1;
-        }
-        else
-        {
-           dy = y0 - y1;
-           sy = -1;
-        }
-
-        e = dx + dy;
         uint16_t x = x0;
-        uint16_t y = y0;
-        
+        uint16_t y = y0;        
         while(true)
         {
-            // Move to the current pixel.
+            // Set the current pixel.
             //
             set_pixel_location(x, y);
-    
-            // Draw the point
-            //
-            // Select the display.
-            // 
-            gpio_write_bit(GPIOC, TFT_nCS_Bit, LO);
-    
-            // Write command to memory
-            //
-            gpio_write_bit(GPIOC, TFT_RS_Bit, LO);    // Command register
-            
-            TFT_Port = (TFT_Port & 0xFF00) | WRITE_TO_MEMORY;
-            gpio_write_bit(GPIOC, TFT_nWR_Bit, LO);
-            gpio_write_bit(GPIOC, TFT_nWR_Bit, HI);
-    
-            // Write data to memory
-            //
-            gpio_write_bit(GPIOC, TFT_RS_Bit, HI);    // Data register
-    
-            TFT_Port = (TFT_Port & 0xFF00) | (color >> 8);
-            gpio_write_bit(GPIOC, TFT_nWR_Bit, LO);
-            gpio_write_bit(GPIOC, TFT_nWR_Bit, HI);
-    
-            TFT_Port = (TFT_Port & 0xFF00) | color;
-            gpio_write_bit(GPIOC, TFT_nWR_Bit, LO);
-            gpio_write_bit(GPIOC, TFT_nWR_Bit, HI);
-    
-            // Unselect the display.
-            //
-            gpio_write_bit(GPIOC, TFT_nCS_Bit, LO);
+            set_pixel_color(color);
 
             // Update the pixel locations.
             //
             if ((x == x1) && (y == y1)) break;
             
-            int16_t e2 = 2 * e;
-            if (e2 >= dy)
+            if ((2 * e) >= dy)
             {
                 if (x == x1) break;
                 e -= dy;
                 x += sx;
             }
-            if (e2 <= dx)
+            if ((2 * e) <= dx)
             {
                 if (y == y1) break;
                 e += dx;
@@ -159,6 +115,34 @@ namespace TFT
     }
 
 
+    // Draw a circle on the display with the given color.
+    // Algorithm from https://iq.opengenus.org/bresenhams-circle-drawing-algorithm/
+    //
+    void Screen::DrawCircle(uint16_t xc, uint16_t yc, uint16_t radius, uint16_t color)
+    {
+        uint16_t x = 0;
+        uint16_t y = radius;
+        
+        int16_t decision_parameter = 3 - 2 * radius;
+        display_partial_circle(xc, yc, x, y, color);
+        while (y >= x)
+        {
+            x++;
+            if (decision_parameter > 0)
+            {
+                y--;
+                decision_parameter = decision_parameter + 4 * (x - y) + 10;
+            }
+            else
+            {
+                decision_parameter = decision_parameter + 4 * x + 6;
+            }
+            display_partial_circle(xc, yc, x, y, color);
+        }
+        return;
+    }
+
+    
     // Fill a rectangle defined on the screen.
     //
     void Screen::FillRectangle(int16_t x, int16_t y, int16_t xsize, int16_t ysize, uint16_t color)
@@ -211,11 +195,6 @@ namespace TFT
         // No control characters.
         //
         if (ch < 0x0020)
-            return;
-
-        // No extended characters.
-        //
-        if (ch > 0x007F)
             return;
             
         // Calculate the index into the font array.
@@ -527,6 +506,71 @@ namespace TFT
          write_data(y);
     }
 
+
+    // Set the pixel at the current location to
+    // the specified color.
+    //
+    void Screen::set_pixel_color(uint16_t color)
+    {
+        // Draw the pixel
+        //
+        // Select the display.
+        // 
+        gpio_write_bit(GPIOC, TFT_nCS_Bit, LO);
+
+        // Write command to memory
+        //
+        gpio_write_bit(GPIOC, TFT_RS_Bit, LO);    // Command register
+        
+        TFT_Port = (TFT_Port & 0xFF00) | WRITE_TO_MEMORY;
+        gpio_write_bit(GPIOC, TFT_nWR_Bit, LO);
+        gpio_write_bit(GPIOC, TFT_nWR_Bit, HI);
+
+        // Write data to memory
+        //
+        gpio_write_bit(GPIOC, TFT_RS_Bit, HI);    // Data register
+
+        TFT_Port = (TFT_Port & 0xFF00) | (color >> 8);
+        gpio_write_bit(GPIOC, TFT_nWR_Bit, LO);
+        gpio_write_bit(GPIOC, TFT_nWR_Bit, HI);
+
+        TFT_Port = (TFT_Port & 0xFF00) | color;
+        gpio_write_bit(GPIOC, TFT_nWR_Bit, LO);
+        gpio_write_bit(GPIOC, TFT_nWR_Bit, HI);
+
+        // Unselect the display.
+        //
+        gpio_write_bit(GPIOC, TFT_nCS_Bit, LO);
+    }
+
+
+    void Screen::display_partial_circle(uint16_t xc, uint16_t yc, uint16_t x, uint16_t y, uint16_t color) 
+    {
+        // Displaying all 8 coordinates of(x,y) residing in 8-octants
+        set_pixel_location(xc + x, yc + y);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc - x, yc + y);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc + x, yc - y);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc - x, yc - y);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc + y, yc + x);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc - y, yc + x);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc + y, yc - x);
+        set_pixel_color(color);
+        
+        set_pixel_location(xc - y, yc - x);
+        set_pixel_color(color);
+    }
 
     // Create a color from the given components.
     //

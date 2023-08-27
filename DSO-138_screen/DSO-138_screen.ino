@@ -15,6 +15,13 @@ void setup()
 
     screen.DrawLine(0, 0, 319, 239, TFT::Color::RGB(255, 255, 255));
     screen.DrawLine(0, 239, 319, 0, TFT::Color::RGB(255, 255, 255));
+    
+    screen.DrawCircle(160, 120, 120, TFT::Color::RGB(255, 255, 255));
+    screen.DrawCircle( 80, 120,  60, TFT::Color::RGB(255, 255, 255));
+    screen.DrawCircle(240, 120,  60, TFT::Color::RGB(255, 255, 255));
+    screen.DrawCircle(160,  60,  60, TFT::Color::RGB(255, 255, 255));
+    screen.DrawCircle(160, 180,  60, TFT::Color::RGB(255, 255, 255));
+
 }
 
 // Main code
