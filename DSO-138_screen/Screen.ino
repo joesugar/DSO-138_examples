@@ -74,6 +74,16 @@ namespace TFT
     }
 
 
+    // Draw an individual pixel.
+    //
+    void Screen::DrawPixel(uint16_t x0, uint16_t y0, uint16_t color)
+    {
+        set_pixel_location(x0, y0);
+        set_pixel_color(color);
+        return;
+    }
+
+    
     // Draw a line on the screen.
     // Algorithm from https://iq.opengenus.org/bresenham-line-drawining-algorithm/
     //
@@ -133,6 +143,34 @@ namespace TFT
                 decision_parameter = decision_parameter + 4 * x + 6;
             }
             display_partial_circle(xc, yc, x, y, color);
+        }
+        return;
+    }
+
+
+    // Fill a circle on the display with the given color.
+    // Algorithm from https://iq.opengenus.org/bresenhams-circle-drawing-algorithm/
+    //
+    void Screen::FillCircle(uint16_t xc, uint16_t yc, uint16_t radius, uint16_t color)
+    {
+        uint16_t x = 0;
+        uint16_t y = radius;
+        
+        int16_t decision_parameter = 3 - 2 * radius;
+        fill_partial_circle(xc, yc, x, y, color);
+        while (y >= x)
+        {
+            x++;
+            if (decision_parameter > 0)
+            {
+                y--;
+                decision_parameter = decision_parameter + 4 * (x - y) + 10;
+            }
+            else
+            {
+                decision_parameter = decision_parameter + 4 * x + 6;
+            }
+            fill_partial_circle(xc, yc, x, y, color);
         }
         return;
     }
@@ -605,7 +643,9 @@ namespace TFT
         }
     }
     
-    
+
+    // Draw points in each of the 8 octets of rhe circle.
+    //
     void Screen::display_partial_circle(uint16_t xc, uint16_t yc, uint16_t x, uint16_t y, uint16_t color) 
     {
         // Displaying all 8 coordinates of(x,y) residing in 8-octants
@@ -632,6 +672,18 @@ namespace TFT
         
         set_pixel_location(xc - y, yc - x);
         set_pixel_color(color);
+    }
+
+
+    // Draw a line connecting points in each of the 8 octets of the circle.
+    //
+    void Screen::fill_partial_circle(uint16_t xc, uint16_t yc, uint16_t x, uint16_t y, uint16_t color) 
+    {
+        draw_line_slope_lt_one(xc - x, yc + y, 2 * x, 0, 1, 1, color);
+        draw_line_slope_lt_one(xc - x, yc - y, 2 * x, 0, 1, 1, color);
+        draw_line_slope_lt_one(xc - y, yc + x, 2 * y, 0, 1, 1, color);
+        draw_line_slope_lt_one(xc - y, yc - x, 2 * y, 0, 1, 1, color);
+        return; 
     }
 
     // Create a color from the given components.
