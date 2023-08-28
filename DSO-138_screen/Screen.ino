@@ -70,46 +70,41 @@ namespace TFT
     //
     void Screen::ClearScreen(uint16_t color)
     {
-        FillRectangle(0, 0, 320, 240, color);
+        FillRectangle(0, 0, screenXSize_, screenYSize_, color);
     }
 
 
     // Draw a line on the screen.
-    // Algorithm from https://www.baeldung.com/cs/bresenhams-line-algorithm
+    // Algorithm from https://iq.opengenus.org/bresenham-line-drawining-algorithm/
     //
     void Screen::DrawLine(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
     {
-        uint16_t dx = (x1 > x0) ? x1 - x0 : x0 - x1;
-        uint16_t dy = (y1 > y0) ? y1 - y0 : y0 - y1;
-        int16_t  sx = (x1 > x0) ? 1 : -1;
-        int16_t  sy = (y1 > y0) ? 1 : -1;
-        int16_t  e = dx + dy;
-
-        uint16_t x = x0;
-        uint16_t y = y0;        
-        while(true)
+        // Switch points so (x0, y0) is on the left hand side
+        //
+        if (x0 > x1)
         {
-            // Set the current pixel.
-            //
-            set_pixel_location(x, y);
-            set_pixel_color(color);
+            uint16_t tmpx = x0;
+            uint16_t tmpy = y0;
+            x0 = x1;
+            y0 = y1;
+            x1 = tmpx;
+            y1 = tmpy;
+        }
 
-            // Update the pixel locations.
-            //
-            if ((x == x1) && (y == y1)) break;
-            
-            if ((2 * e) >= dy)
-            {
-                if (x == x1) break;
-                e -= dy;
-                x += sx;
-            }
-            if ((2 * e) <= dx)
-            {
-                if (y == y1) break;
-                e += dx;
-                y += sy;
-            }
+        // Initialize required values.
+        //
+        int16_t dx = (x1 > x0) ? x1 - x0 : x0 - x1;    // abs(x1 - x0)
+        int16_t dy = (y1 > y0) ? y1 - y0 : y0 - y1;    // abs(y1 - y0)
+        int16_t sx = (x1 > x0) ? 1 : -1;               // sgn(x1 - x0)
+        int16_t sy = (y1 > y0) ? 1 : -1;               // sgn(y1 - y0)
+
+        if (dx > dy)
+        {
+            draw_line_slope_lt_one(x0, y0, dx, dy, sx, sy, color);
+        }
+        else
+        {
+            draw_line_slope_ge_one(x0, y0, dx, dy, sx, sy, color);
         }
         return;
     }
@@ -142,6 +137,17 @@ namespace TFT
         return;
     }
 
+
+    // Draw a rectange on the screen.
+    //
+    void Screen::DrawRectangle(int16_t x, int16_t y, int16_t x_size, int16_t y_size, uint16_t color)
+    {
+        DrawLine(x, y, x + x_size - 1, y, color);
+        DrawLine(x, y, x, y + y_size - 1, color);
+        DrawLine(x + x_size - 1, y + y_size - 1, x + x_size - 1, y, color);
+        DrawLine(x + x_size - 1, y + y_size - 1, x, y + y_size - 1, color);
+        return;  
+    }
     
     // Fill a rectangle defined on the screen.
     //
@@ -544,6 +550,62 @@ namespace TFT
     }
 
 
+    // Draw a line with slope whose absolute value < 1.
+    //
+    void Screen::draw_line_slope_lt_one(
+        uint16_t x0, uint16_t y0, int16_t dx, int16_t dy, int16_t sx, int16_t sy, uint16_t color)
+    {
+        int16_t pk = (2 * dy) - dx;
+        for (int16_t i = 0, x = x0, y = y0; i < dx ; i++, x += sx)
+        {
+            // Set the pixel.
+            //
+            set_pixel_location(static_cast<uint16_t>(x), static_cast<uint16_t>(y));
+            set_pixel_color(color);
+                      
+            // Update the pixel locations.
+            //
+            if (pk < 0)
+            {
+                pk += 2 * dy;
+            }
+            else
+            {
+                y += sy;
+                pk += (2 * (dy - dx));
+            }
+        }
+    }
+
+
+    // Draw a line with slope whose absolute value >= 1.
+    //
+    void Screen::draw_line_slope_ge_one(
+        uint16_t x0, uint16_t y0, int16_t dx, int16_t dy, int16_t sx, int16_t sy, uint16_t color)
+    {
+        int16_t pk = (2 * dx) - dy;
+        for (int16_t i = 0, x = x0, y = y0; i < dy ; i++, y += sy)
+        {
+            // Set the pixel.
+            //
+            set_pixel_location(static_cast<uint16_t>(x), static_cast<uint16_t>(y));
+            set_pixel_color(color);
+                      
+            // Update the pixel locations.
+            //
+            if (pk < 0)
+            {
+                pk += 2 * dx;
+            }
+            else
+            {
+                x += sx;
+                pk += (2 * (dx - dy));
+            }
+        }
+    }
+    
+    
     void Screen::display_partial_circle(uint16_t xc, uint16_t yc, uint16_t x, uint16_t y, uint16_t color) 
     {
         // Displaying all 8 coordinates of(x,y) residing in 8-octants
@@ -579,11 +641,17 @@ namespace TFT
         uint16_t R16 = static_cast<uint16_t>(R);
         uint16_t G16 = static_cast<uint16_t>(G);
         uint16_t B16 = static_cast<uint16_t>(B);
-        
-        const uint16_t Rbits =  0;  // Red bits position
-        const uint16_t Gbits =  5;  // Green bits position
-        const uint16_t Bbits = 11;  // Blue bits position
+        return RGB_(R16, G16, B16);
+    }
 
-        return (((R16 >> 3) << Rbits) | ((G16 >> 2) << Gbits) | ((B16 >> 3) << Bbits));
+    // Create a color from a given hex color code.
+    // The code is of the form 0x00RRGGBB
+    //
+    uint16_t Color::RGB(uint32_t color_code)
+    {
+        uint8_t R16 = static_cast<uint16_t>((color_code >> 16) & 0x000000FF);
+        uint8_t G16 = static_cast<uint16_t>((color_code >>  8) & 0x000000FF);
+        uint8_t B16 = static_cast<uint16_t>((color_code >>  0) & 0x000000FF);
+        return RGB_(R16, G16, B16);
     }
 }
