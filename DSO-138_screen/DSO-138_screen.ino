@@ -21,7 +21,7 @@ void setup()
 
     // Print a single character and string.
     //
-    screen.PrintCharacter(10, 10, 'A');
+    screen.PrintCharacter(10, 10, 0xBF);
     screen.PrintString(10, 26, "The quick brown fox");
 
     // Draw a couple of lines with positive and negative slope.
